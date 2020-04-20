@@ -64,11 +64,11 @@ class PageAccount(wx.Panel):
     def OnUsageCalculationDone(self, event):
         if not event.data:
             self.driveUsageBar.SetStatusMessage("Your Google Drive usage is shown below:")
-            self.driveUsageBar.SetMoviesUsage(self.sync_model.GetMovieUsage())
-            self.driveUsageBar.SetDocumentUsage(self.sync_model.GetDocumentUsage())
-            self.driveUsageBar.SetOthersUsage(self.sync_model.GetOthersUsage())
-            self.driveUsageBar.SetAudioUsage(self.sync_model.GetAudioUsage())
-            self.driveUsageBar.SetPhotoUsage(self.sync_model.GetPhotoUsage())
+            self.driveUsageBar.SetMoviesUsage(self.sync_model.Drive.GetMovieUsage())
+            self.driveUsageBar.SetDocumentUsage(self.sync_model.Drive.GetDocumentUsage())
+            self.driveUsageBar.SetOthersUsage(self.sync_model.Drive.GetOthersUsage())
+            self.driveUsageBar.SetAudioUsage(self.sync_model.Drive.GetAudioUsage())
+            self.driveUsageBar.SetPhotoUsage(self.sync_model.Drive.GetPhotoUsage())
             self.driveUsageBar.RePaint()
         else:
             self.driveUsageBar.SetStatusMessage("Sorry, could not calculate your Google Drive usage.")

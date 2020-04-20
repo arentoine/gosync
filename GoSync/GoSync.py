@@ -25,13 +25,16 @@ from defines import *
 # Add the current path to gosync path.
 sys.path.insert(0, APP_PATH)
 
+class App(wx.App):
+    def OnInit(self):
+        controller = GoSyncController()
+        controller.Center()
+        controller.Show()
+        return True
+
 def main():
     os.chdir(APP_PATH)
-#    app = wx.PySimpleApp() : Deprecated
-    app = wx.App(False)
-    controller = GoSyncController()
-    controller.Center()
-    controller.Show()
+    app = App(False)
     app.MainLoop()
 
 if __name__ == "__main__":
