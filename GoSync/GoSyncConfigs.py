@@ -33,22 +33,25 @@ class Configs(object):
 
         self.config_path = os.path.join(self.home_path, ".gosync")       
         if not os.path.exists(self.config_path):
-            os.mkdir(self.config_path, 0755)
+            os.mkdir(self.config_path, 0o0755)
 
         self.config_file = os.path.join(self.home_path, '.gosync', 'gosyncrc')
         self.driveTree = None
         self.tree_pickle_file = ''
         self.user_email = ''
+        self.root_Id = ''
 
         self.base_mirror_directory = os.path.join(self.home_path, "Google Drive")
         if not os.path.exists(self.base_mirror_directory):
-            os.mkdir(self.base_mirror_directory, 0755)
+            os.mkdir(self.base_mirror_directory, 0o0755)
 
         self.user_mirror_directory = ''
         self.sync_selection = []
         self.config_dict = {}
         self.account_dict = {}
         self.drive_usage_dict = {}
+        #experimental
+        self.File_Status_Dict = {}
         self.logger.info("Configs - Initialize - Completed")
 
     def LoadConfigFile(self):
@@ -60,6 +63,7 @@ class Configs(object):
                 config_json = json.load(f)
                 try:
                     self.user_email = config_json['user_email']
+                    self.root_Id = config_json['root_id']
                     self.config_dict = config_json[self.user_email]
                     self.sync_selection = self.config_dict['Sync Selection']
                     try:
@@ -86,6 +90,7 @@ class Configs(object):
             self.config_dict['Sync Selection'] = [['root', '']]
 
         self.account_dict['user_email'] = self.user_email
+        self.account_dict['root_id'] = self.root_Id
         self.account_dict[self.user_email] = self.config_dict
 
         json.dump(self.account_dict, f)
@@ -119,7 +124,7 @@ class Configs(object):
 #        self.logger.debug("Configs - UpdateConfig - user_mirror_directory - Started")
         self.user_mirror_directory = os.path.join(self.base_mirror_directory, self.user_email)
         if not os.path.exists(self.user_mirror_directory):
-            os.mkdir(self.user_mirror_directory, 0755)
+            os.mkdir(self.user_mirror_directory, 0o0755)
 #        self.logger.debug("Configs - UpdateConfig - tree_pickle_file - Completed")
 
 #        self.logger.debug("Configs - UpdateConfig - ConfigFile - Started")

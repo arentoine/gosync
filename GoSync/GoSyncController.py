@@ -40,7 +40,7 @@ class PageAccount(wx.Panel):
         self.time_left=0
 
         aboutdrive = sync_model.DriveInfo()
-        self.driveUsageBar = DriveUsageBox(self, long(aboutdrive['storageQuota']['limit']), -1)
+        self.driveUsageBar = DriveUsageBox(self, int(aboutdrive['storageQuota']['limit']), -1)
         self.driveUsageBar.SetStatusMessage("Calculating your categorical Google Drive usage. Please wait.")
         self.driveUsageBar.SetMoviesUsage(0)
         self.driveUsageBar.SetDocumentUsage(0)
@@ -108,9 +108,9 @@ class GoSyncController(wx.Frame):
         title_string = "GoSync - %s (%s used of %s)" % (self.aboutdrive['user']['displayName'],
 
 
-self.FileSizeHumanize(long(self.aboutdrive['storageQuota']['usageInDrive'])),
+self.FileSizeHumanize(int(self.aboutdrive['storageQuota']['usageInDrive'])),
 
-self.FileSizeHumanize(long(self.aboutdrive['storageQuota']['limit'])))
+self.FileSizeHumanize(int(self.aboutdrive['storageQuota']['limit'])))
         self.SetTitle(title_string)
         appIcon = wx.Icon(APP_ICON, wx.BITMAP_TYPE_PNG)
         self.SetIcon(appIcon)

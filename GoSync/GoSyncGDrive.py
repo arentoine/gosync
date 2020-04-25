@@ -28,6 +28,18 @@ class ClientSecretsNotFound(RuntimeError):
 class GDriveConnectionFailed(RuntimeError):
     """Connection to Google Drive Failed"""
 
+google_docs_mimelist = ['application/vnd.google-apps.spreadsheet', \
+                            'application/vnd.google-apps.sites', \
+                            'application/vnd.google-apps.script', \
+                            'application/vnd.google-apps.presentation', \
+                            'application/vnd.google-apps.fusiontable', \
+                            'application/vnd.google-apps.form', \
+                            'application/vnd.google-apps.drawing', \
+                            'application/vnd.google-apps.document', \
+                            'application/vnd.google-apps.map']
+
+Fields_List = 'id, name, mimeType, size, md5Checksum, parents, modifiedTime, trashed'
+
 class GDrive(object):
     def __init__(self,Config_Path, Logger):
 #	    object.__init__(self)
@@ -142,10 +154,14 @@ class GDrive(object):
             # The file token.pickle stores the user's access and refresh tokens, and is
             # created automatically when the authorization flow completes for the first
             # time.
+            self.logger.debug("GDrive - DoAuthenticate - check creds path")
             if os.path.exists(self.client_pickle):
+                self.logger.debug("GDrive - DoAuthenticate - open creds")
                 with open(self.client_pickle, 'rb') as token:
+                    self.logger.debug("GDrive - DoAuthenticate - assign creds")
                     creds = pickle.load(token)
             # If there are no (valid) credentials available, let the user log in.
+            self.logger.debug("GDrive - DoAuthenticate - validate creds")
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
                     creds.refresh(Request())
@@ -156,6 +172,7 @@ class GDrive(object):
                 with open(self.client_pickle, 'wb') as token:
                     pickle.dump(creds, token)
 
+            self.logger.debug("GDrive - DoAuthenticate - assign service")
             service = build('drive', 'v3', credentials=creds)
             self.Session = service
             self.is_logged_in = True
@@ -212,7 +229,12 @@ class GDrive(object):
             response = self.Session.changes().list(pageToken=page_token, spaces='drive').execute()
             for change in response.get('changes'):
                 # Process change
-                print 'Change found for file: %s' % change
+                self.logger.debug("GDrive - FetchChanges - Found Changes on file")
+                self.logger.debug("GDrive - FetchChanges - Found Changes on file %s" % change['fileId'])
+#                print 'Change found for file: %s' % change['fileId']
+                print ('Change found for file: %s' % change)
+                if not change['removed'] : 
+                    ProcessChange(change['fileId'])
             if 'newStartPageToken' in response:
                 # Last page, save this token for the next polling interval
                 self.PageToken = response.get('newStartPageToken')
@@ -221,3 +243,18 @@ class GDrive(object):
         self.logger.debug("Configs - FetchChanges - Completed")
 
 
+    def IsGoogleDocument(self, f):
+        if any(f['mimeType'] in s for s in google_docs_mimelist):
+            return True
+        else:
+            return False
+
+    def ProcessChange(self, fileId):
+        self.logger.debug("GDrive - Identify_Change - Started")
+        aFile = self.Session.files().get(fileId=fileId, fields=Fields_List).execute()
+        print ('file %s ' % aFile)
+        if not IsGoogleDocument(aFile):
+            for parent in aFile['parents']:
+                ParentName = self.Session.files().get(fileId=parent, fields=Fields_List).execute()
+                print ('parent %s ' % ParentName['name'])
+        self.logger.debug("Configs - Identify_Change - Completed")

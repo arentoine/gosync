@@ -32,7 +32,6 @@ from GoSyncEvents import *
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-from GoSyncSync import SyncDown
 from GoSyncConfigs import Configs
 from GoSyncGDrive import GDrive
 import json, pickle
@@ -142,7 +141,7 @@ class GoSyncModel(object):
 
     def HashOfFile(self, abs_filepath):
         data = open(abs_filepath, "r").read()
-        return hashlib.md5(data).hexdigest()
+        return hashlib.md5(data.encode('utf-8')).hexdigest()
 
     def DriveInfo(self):
         return self.Drive.Account
@@ -253,7 +252,10 @@ class GoSyncModel(object):
                                                          fileId=file_object['id'],
                                                          fields='id, appProperties').execute()
             return updated_file
-        except errors.HttpError, error:
+        except errors.HttpError:
+            self.logger.error('An error occurred while renaming file: %s' % error)
+            return None
+        except error:
             self.logger.error('An error occurred while renaming file: %s' % error)
             return None
         except:
@@ -280,7 +282,10 @@ class GoSyncModel(object):
             file_metadata = {'trashed':True}
             self.Drive.Session.files().update(body=file_metadata,fileId=file_object['id']).execute()
             self.logger.info({"TRASH_FILE: File %s deleted successfully.\n" % file_object['name']})
-        except errors.HttpError, error:
+        except errors.HttpError :
+            self.logger.error("TRASH_FILE: HTTP Error\n")
+            raise RegularFileTrashFailed()
+        except error:
             self.logger.error("TRASH_FILE: HTTP Error\n")
             raise RegularFileTrashFailed()
 
@@ -324,13 +329,12 @@ class GoSyncModel(object):
             self.logger.exception("move failed\n")
 
     def MoveObservedFile(self, src_path, dest_path):
-	from_drive_path = src_path.split(self.configs.user_mirror_directory+'/')[1]
-	to_drive_path = os.path.dirname(dest_path.split(self.configs.user_mirror_directory+'/')[1])
-
+        from_drive_path = src_path.split(self.configs.user_mirror_directory+'/')[1]
+        to_drive_path = os.path.dirname(dest_path.split(self.configs.user_mirror_directory+'/')[1])
         self.logger.debug("Moving file %s to %s\n" % (from_drive_path, to_drive_path))
 
-	try:
-	    ftm = self.LocateFileOnDrive(from_drive_path)
+        try:
+            ftm = self.LocateFileOnDrive(from_drive_path)
             self.logger.debug("MoveObservedFile: Found source file on drive\n")
             if os.path.dirname(from_drive_path) == '':
                 sf = 'root'
@@ -359,29 +363,29 @@ class GoSyncModel(object):
             except:
                 self.logger.error("MoveObservedFile: Unknown error while locating destination folder on drive.\n")
                 return
-	except FileNotFound:
-            self.logger.error("MoveObservedFile: Couldn't locate file on drive.\n")
+        except FileNotFound:
+                self.logger.error("MoveObservedFile: Couldn't locate file on drive.\n")
+                return
+        except FileListQueryFailed:
+            self.logger.error("MoveObservedFile: File Query failed. aborting.\n")
             return
-	except FileListQueryFailed:
-	    self.logger.error("MoveObservedFile: File Query failed. aborting.\n")
-	    return
-	except FolderNotFound:
-	    self.logger.error("MoveObservedFile: Folder not found\n")
-	    return
-	except:
-	    self.logger.error("MoveObservedFile: Unknown error while moving file.\n")
-	    return
+        except FolderNotFound:
+            self.logger.error("MoveObservedFile: Folder not found\n")
+            return
+        except:
+            self.logger.error("MoveObservedFile: Unknown error while moving file.\n")
+            return
 
     def HandleMovedFile(self, src_path, dest_path):
         drive_path1 = os.path.dirname(src_path.split(self.configs.user_mirror_directory+'/')[1])
-	drive_path2 = os.path.dirname(dest_path.split(self.configs.user_mirror_directory+'/')[1])
+        drive_path2 = os.path.dirname(dest_path.split(self.configs.user_mirror_directory+'/')[1])
 
-	if drive_path1 == drive_path2:
+        if drive_path1 == drive_path2:
             self.logger.debug("Rename file\n")
-	    self.RenameObservedFile(src_path, self.PathLeaf(dest_path))
-	else:
+            self.RenameObservedFile(src_path, self.PathLeaf(dest_path))
+        else:
             self.logger.debug("Move file\n")
-	    self.MoveObservedFile(src_path, dest_path)
+            self.MoveObservedFile(src_path, dest_path)
 
     #################################################
     ####### DOWNLOAD SECTION (Syncing local) #######
@@ -527,7 +531,7 @@ class GoSyncModel(object):
             while True:
                 response = self.Drive.Session.files().list(q=query,
                                       spaces='drive',
-                                      fields='nextPageToken, files(id, name, mimeType, size, md5Checksum)',
+                                      fields='nextPageToken, files(id, name, mimeType, size, md5Checksum, trashed, parents)',
                                       pageToken=page_token).execute()
                 filelist.extend(response.get('files',[]))
                 page_token = response.get('nextPageToken', None)
@@ -546,15 +550,23 @@ class GoSyncModel(object):
 
     def TotalFilesInFolder(self, parent='root'):
         file_count = 0
+        self.configs.File_Status_Dict.clear
         try:
             file_list = self.MakeFileListQuery("'%s' in parents and trashed=false"  % parent)
             for f in file_list:
+                f_status = f.copy()
+                f_status.pop('mimeType', None)
+                f_status.pop('size', None)
+                self.configs.File_Status_Dict[f['id']] = f_status
                 if f['mimeType'] == 'application/vnd.google-apps.folder':
                     file_count += self.TotalFilesInFolder(f['id'])
                     file_count += 1
                 else:
                     file_count += 1
+                    if not self.configs.root_Id and parent =='root':
+                        self.configs.root_Id = f['parents']
 
+            print (self.configs.File_Status_Dict)
             return file_count
         except:
             raise
@@ -570,9 +582,13 @@ class GoSyncModel(object):
 
 #### DownloadFileByObject
     def DownloadFileByObject(self, file_obj, download_path):
+        self.logger.debug("GoSyncModel - DownloadFileByObject - Started")
         abs_filepath = os.path.join(download_path, file_obj['name'])
         if os.path.exists(abs_filepath):
-            if self.HashOfFile(abs_filepath) == file_obj['md5Checksum']:
+            self.logger.debug("GoSyncModel - DownloadFileByObject - file path exists")
+            self.logger.debug("GoSyncModel - DownloadFileByObject - file_obj['md5Checksum'] : %s" % file_obj['md5Checksum'])
+            self.logger.debug("GoSyncModel - DownloadFileByObject - HashOfFile(abs_filepath): %s " % self.HashOfFile(abs_filepath))
+            if (self.HashOfFile(abs_filepath) == file_obj['md5Checksum']):
                 self.logger.info('DownloadFileByObject: Skipping File (%s) - same as remote.\n' % abs_filepath)
                 return
             else:
@@ -591,6 +607,7 @@ class GoSyncModel(object):
             fh.close()
             self.updates_done = 1
             self.logger.info('DownloadFileByObject: Download Completed - File (%s)\n' % abs_filepath)
+        self.logger.debug("GoSyncModel - DownloadFileByObject - Completed")
 
 #### SyncRemoteDirectory
     def SyncRemoteDirectory(self, parent, pwd, recursive=True):
@@ -609,7 +626,7 @@ class GoSyncModel(object):
                     self.logger.debug("SyncRemoteDirectory: Sync has been paused. Aborting.\n")
                     return
 
-                if f['mimeType'] == 'application/vnd.google-apps.folder':
+                if (f['mimeType'] == 'application/vnd.google-apps.folder'):
                     if not recursive:
                         continue
 
